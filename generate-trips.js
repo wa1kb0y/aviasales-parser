@@ -77,7 +77,15 @@ function generateCombinations() {
         for (let offset = 0; offset <= endN - startN; offset++) {
             const dep = addDays(start.day, start.month, offset);
 
-            if (route.length === 3) {
+            if (route.length === 2) {
+                // Односторонний перелёт: A → B
+                combinations.push({
+                    label: `${fmtDate(dep)}  (в одну сторону)`,
+                    dates: [dep],
+                    url: buildUrl(route, [dep], pax)
+                });
+
+            } else if (route.length === 3) {
                 // Простой туда-обратно: A → B → A
                 for (let nights = nightMin; nights <= nightMax; nights++) {
                     const ret = addDays(dep.day, dep.month, nights);
@@ -119,7 +127,9 @@ function main() {
     console.log(`Пассажиры:  ${pax}`);
     console.log('Окна вылета:');
     windows.forEach((w, i) => console.log(`  ${i + 1}. ${w['от']} – ${w['до']}`));
-    if (route.length === 3) {
+    if (route.length === 2) {
+        console.log(`Тип:        в одну сторону`);
+    } else if (route.length === 3) {
         console.log(`Ночей:      ${nightMin}–${nightMax}`);
     }
 

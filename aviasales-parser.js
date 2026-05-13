@@ -29,9 +29,10 @@ if (urls.length === 0) {
 
 // Функция для извлечения дат и маршрута из URL
 function generateFileName(url) {
-    // Парсим URL: 3-сегментный MOW2102DXB2502MRU0503MOW2 или 2-сегментный MRU0503IST0503MOW2
+    // Парсим URL: 3-сегментный MOW2102DXB2502MRU0503MOW2, 2-сегментный MRU0503IST0503MOW2, или 1-сегментный AER1206KJA2
     const match3 = url.match(/([A-Z]{3})(\d{4})([A-Z]{3})(\d{4})([A-Z]{3})(\d{4})([A-Z]{3})/);
     const match2 = !match3 && url.match(/\/([A-Z]{3})(\d{4})([A-Z]{3})(\d{4})([A-Z]{3})\d*$/);
+    const match1 = !match3 && !match2 && url.match(/\/([A-Z]{3})(\d{4})([A-Z]{3})(\d+)$/);
 
     let dates = 'unknown';
     let route = 'unknown';
@@ -50,6 +51,12 @@ function generateFileName(url) {
         route = `${city1}-${city2}-${city3}`;
         startDate = date1;
         cities = [city1, city2, city3];
+    } else if (match1) {
+        const [, city1, date1, city2] = match1;
+        dates = date1;
+        route = `${city1}-${city2}`;
+        startDate = date1;
+        cities = [city1, city2];
     }
 
     const now = new Date();
@@ -292,8 +299,10 @@ async function parseOnePage(page, searchUrl, isFirstUrl) {
         const matchesCriteria = d ? checkCriteria(d, cities) : false;
 
         // Используем города из URL для маршрутов (вместо извлечения из текста)
+        const has2seg = cities.length >= 3;
         const has3seg = cities.length >= 4;
-        return {
+
+        const row = {
             '✓': matchesCriteria ? '✓' : '',
             '№': idx + 1,
             'Цена': ticket.price || '',
@@ -304,24 +313,32 @@ async function parseOnePage(page, searchUrl, isFirstUrl) {
             'Р1 Прилёт': d ? d.seg1_arrive : '',
             'Р1 Время': d ? d.seg1_duration : '',
             'Р1 Тип': d ? d.seg1_type : '',
-            'Р1 Транзит': d ? d.seg1_transit : '',
-            'Р2': `${cities[1]}→${cities[2]}`,
-            'Р2 Дата': d ? d.seg2_date_depart : '',
-            'Р2 Вылет': d ? d.seg2_depart : '',
-            'Р2 Дата2': d ? d.seg2_date_arrive : '',
-            'Р2 Прилёт': d ? d.seg2_arrive : '',
-            'Р2 Время': d ? d.seg2_duration : '',
-            'Р2 Тип': d ? d.seg2_type : '',
-            'Р2 Транзит': d ? d.seg2_transit : '',
-            'Р3': has3seg ? `${cities[2]}→${cities[3]}` : '',
-            'Р3 Дата': has3seg && d ? d.seg3_date_depart : '',
-            'Р3 Вылет': has3seg && d ? d.seg3_depart : '',
-            'Р3 Дата2': has3seg && d ? d.seg3_date_arrive : '',
-            'Р3 Прилёт': has3seg && d ? d.seg3_arrive : '',
-            'Р3 Время': has3seg && d ? d.seg3_duration : '',
-            'Р3 Тип': has3seg && d ? d.seg3_type : '',
-            'Р3 Транзит': has3seg && d ? d.seg3_transit : ''
+            'Р1 Транзит': d ? d.seg1_transit : ''
         };
+
+        if (has2seg) {
+            row['Р2'] = `${cities[1]}→${cities[2]}`;
+            row['Р2 Дата'] = d ? d.seg2_date_depart : '';
+            row['Р2 Вылет'] = d ? d.seg2_depart : '';
+            row['Р2 Дата2'] = d ? d.seg2_date_arrive : '';
+            row['Р2 Прилёт'] = d ? d.seg2_arrive : '';
+            row['Р2 Время'] = d ? d.seg2_duration : '';
+            row['Р2 Тип'] = d ? d.seg2_type : '';
+            row['Р2 Транзит'] = d ? d.seg2_transit : '';
+        }
+
+        if (has3seg) {
+            row['Р3'] = `${cities[2]}→${cities[3]}`;
+            row['Р3 Дата'] = d ? d.seg3_date_depart : '';
+            row['Р3 Вылет'] = d ? d.seg3_depart : '';
+            row['Р3 Дата2'] = d ? d.seg3_date_arrive : '';
+            row['Р3 Прилёт'] = d ? d.seg3_arrive : '';
+            row['Р3 Время'] = d ? d.seg3_duration : '';
+            row['Р3 Тип'] = d ? d.seg3_type : '';
+            row['Р3 Транзит'] = d ? d.seg3_transit : '';
+        }
+
+        return row;
     });
 
     // Сортировка
@@ -347,12 +364,10 @@ async function parseOnePage(page, searchUrl, isFirstUrl) {
     // Создаём Excel
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.json_to_sheet(allTicketsData);
-    ws['!cols'] = [
-        { wch: 3 }, { wch: 4 }, { wch: 12 },
-        { wch: 9 }, { wch: 6 }, { wch: 5 }, { wch: 6 }, { wch: 5 }, { wch: 8 }, { wch: 10 },
-        { wch: 9 }, { wch: 6 }, { wch: 5 }, { wch: 6 }, { wch: 5 }, { wch: 8 }, { wch: 10 },
-        { wch: 9 }, { wch: 6 }, { wch: 5 }, { wch: 6 }, { wch: 5 }, { wch: 8 }, { wch: 10 }
-    ];
+    const segCols = [{ wch: 9 }, { wch: 6 }, { wch: 5 }, { wch: 6 }, { wch: 5 }, { wch: 8 }, { wch: 10 }, { wch: 6 }];
+    const baseCols = [{ wch: 3 }, { wch: 4 }, { wch: 12 }];
+    const numSegs = fileNames.cities.length - 1;
+    ws['!cols'] = [...baseCols, ...Array(numSegs).fill(segCols).flat()];
     XLSX.utils.book_append_sheet(wb, ws, 'Билеты');
 
     // Сводка (только подходящие)
@@ -561,17 +576,20 @@ async function parseAviasales() {
 
             // "По датам": сетка дата вылета × кол-во ночей → мин. цена
             try {
+                const isOneWay = createdFiles[0].cities.length === 2;
                 const dateGrid = {};
                 const nightsSet = new Set();
                 createdFiles.forEach(f => {
+                    const m1 = f.dates.match(/^(\d{2})(\d{2})$/);
                     const m2 = f.dates.match(/^(\d{2})(\d{2})-(\d{2})(\d{2})$/);
                     const m3 = f.dates.match(/^(\d{2})(\d{2})-(\d{2})(\d{2})-(\d{2})(\d{2})$/);
                     let depDay, depMonth, retDay, retMonth;
-                    if (m2)      { depDay=+m2[1]; depMonth=+m2[2]; retDay=+m2[3]; retMonth=+m2[4]; }
+                    if (m1)      { depDay=+m1[1]; depMonth=+m1[2]; retDay=depDay; retMonth=depMonth; }
+                    else if (m2) { depDay=+m2[1]; depMonth=+m2[2]; retDay=+m2[3]; retMonth=+m2[4]; }
                     else if (m3) { depDay=+m3[1]; depMonth=+m3[2]; retDay=+m3[5]; retMonth=+m3[6]; }
                     else return;
 
-                    const nights = _dayOfYear(retDay, retMonth) - _dayOfYear(depDay, depMonth);
+                    const nights = isOneWay ? 0 : _dayOfYear(retDay, retMonth) - _dayOfYear(depDay, depMonth);
                     const depKey = `${String(depDay).padStart(2,'0')}.${String(depMonth).padStart(2,'0')}`;
                     nightsSet.add(nights);
                     if (!dateGrid[depKey]) dateGrid[depKey] = {};
@@ -602,28 +620,35 @@ async function parseAviasales() {
 
                 const gridRows = sortedDates.map(date => {
                     const row = { 'Дата вылета': date };
-                    sortedNights.forEach(n => {
-                        const p = dateGrid[date][n];
-                        row[`${n} ноч.`] = p ? p.toLocaleString('ru-RU') + ' ₽' : '—';
-                    });
+                    if (isOneWay) {
+                        const p = dateGrid[date][0];
+                        row['Мин. цена'] = p ? p.toLocaleString('ru-RU') + ' ₽' : '—';
+                    } else {
+                        sortedNights.forEach(n => {
+                            const p = dateGrid[date][n];
+                            row[`${n} ноч.`] = p ? p.toLocaleString('ru-RU') + ' ₽' : '—';
+                        });
+                    }
                     return row;
                 });
 
                 const gridWs = XLSX.utils.json_to_sheet(gridRows);
-                gridWs['!cols'] = [{ wch: 14 }, ...sortedNights.map(() => ({ wch: 16 }))];
+                gridWs['!cols'] = [{ wch: 14 }, ...(isOneWay ? [{ wch: 16 }] : sortedNights.map(() => ({ wch: 16 })))];
                 XLSX.utils.book_append_sheet(summaryWb, gridWs, 'По датам');
-                console.log(`✓ Сводка "По датам": ${sortedDates.length} дат × ${sortedNights.length} вар. ночей`);
+                console.log(`✓ Сводка "По датам": ${sortedDates.length} дат${isOneWay ? '' : ` × ${sortedNights.length} вар. ночей`}`);
 
                 // "Все варианты": полный список всех рейсов отсортированный по цене с временем вылета
                 const allOptions = [];
                 createdFiles.forEach(f2 => {
+                    const m1b = f2.dates.match(/^(\d{2})(\d{2})$/);
                     const m2b = f2.dates.match(/^(\d{2})(\d{2})-(\d{2})(\d{2})$/);
                     const m3b = f2.dates.match(/^(\d{2})(\d{2})-(\d{2})(\d{2})-(\d{2})(\d{2})$/);
                     let dD, dM, rD, rM;
-                    if (m2b)      { dD=+m2b[1]; dM=+m2b[2]; rD=+m2b[3]; rM=+m2b[4]; }
+                    if (m1b)      { dD=+m1b[1]; dM=+m1b[2]; rD=dD; rM=dM; }
+                    else if (m2b) { dD=+m2b[1]; dM=+m2b[2]; rD=+m2b[3]; rM=+m2b[4]; }
                     else if (m3b) { dD=+m3b[1]; dM=+m3b[2]; rD=+m3b[5]; rM=+m3b[6]; }
                     else return;
-                    const n2 = _dayOfYear(rD, rM) - _dayOfYear(dD, dM);
+                    const n2 = isOneWay ? 0 : _dayOfYear(rD, rM) - _dayOfYear(dD, dM);
                     const dk = `${String(dD).padStart(2,'0')}.${String(dM).padStart(2,'0')}`;
 
                     const wb3 = XLSX.readFile(f2.excel);
@@ -634,25 +659,40 @@ async function parseAviasales() {
                         if (!priceStr.includes('₽')) return;
                         const priceVal = parseInt(priceStr.replace(/\D/g, ''));
                         if (!priceVal || priceVal < 5000) return;
-                        allOptions.push({
-                            'Цена': priceStr,
-                            'Вылет': dk,
-                            'Ноч.': n2,
-                            'Туда дата': r['Р1 Дата'] || '',
-                            'Туда время': r['Р1 Вылет'] || '',
-                            'Прилёт MSQ': r['Р1 Прилёт'] || '',
-                            'Обратно дата': r['Р2 Дата'] || '',
-                            'Обратно время': r['Р2 Вылет'] || '',
-                            'Прилёт MOW': r['Р2 Прилёт'] || '',
-                            '_sort': priceVal
-                        });
+                        if (isOneWay) {
+                            allOptions.push({
+                                'Цена': priceStr,
+                                'Вылет': dk,
+                                'Дата': r['Р1 Дата'] || '',
+                                'Время': r['Р1 Вылет'] || '',
+                                'Прилёт': r['Р1 Прилёт'] || '',
+                                '_sort': priceVal
+                            });
+                        } else {
+                            allOptions.push({
+                                'Цена': priceStr,
+                                'Вылет': dk,
+                                'Ноч.': n2,
+                                'Туда дата': r['Р1 Дата'] || '',
+                                'Туда время': r['Р1 Вылет'] || '',
+                                'Прилёт MSQ': r['Р1 Прилёт'] || '',
+                                'Обратно дата': r['Р2 Дата'] || '',
+                                'Обратно время': r['Р2 Вылет'] || '',
+                                'Прилёт MOW': r['Р2 Прилёт'] || '',
+                                '_sort': priceVal
+                            });
+                        }
                     });
                 });
                 allOptions.sort((a, b) => a._sort - b._sort);
                 allOptions.forEach(r => delete r._sort);
 
                 const optWs = XLSX.utils.json_to_sheet(allOptions);
-                optWs['!cols'] = [{wch:14},{wch:8},{wch:5},{wch:10},{wch:8},{wch:10},{wch:12},{wch:10},{wch:10}];
+                if (isOneWay) {
+                    optWs['!cols'] = [{wch:14},{wch:8},{wch:10},{wch:8},{wch:8}];
+                } else {
+                    optWs['!cols'] = [{wch:14},{wch:8},{wch:5},{wch:10},{wch:8},{wch:10},{wch:12},{wch:10},{wch:10}];
+                }
                 XLSX.utils.book_append_sheet(summaryWb, optWs, 'Все варианты');
                 console.log(`✓ "Все варианты": ${allOptions.length} рейсов по цене`);
             } catch (gridErr) {
